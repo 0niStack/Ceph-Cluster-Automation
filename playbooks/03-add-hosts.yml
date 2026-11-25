@@ -13,7 +13,7 @@
   become: true
   tasks:
     - name: Authorize cephadm key for {{ ansible_user }}
-      ansible.builtin.authorized_key:
+      ansible.posix.authorized_key:
         user: "{{ ansible_user }}"
         key: "{{ hostvars[groups['bootstrap'][0]].ceph_pub.content | b64decode }}"
 

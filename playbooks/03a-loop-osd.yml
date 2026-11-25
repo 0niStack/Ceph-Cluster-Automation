@@ -4,11 +4,17 @@
   hosts: ceph
   become: true
   tasks:
-    - name: Check free space on /
+    - name: Is the backing file already there?
+      ansible.builtin.stat:
+        path: "{{ osd_loop_file }}"
+      register: loop_img
+      when: osd_backend == 'loop'
+
+    - name: Check free space on / (only needed before the file exists)
       ansible.builtin.assert:
         that: (ansible_facts.mounts | selectattr('mount','equalto','/') | first).size_available > (osd_loop_size_gb + 4) * 1024 * 1024 * 1024
         fail_msg: "Not enough free space on / for a {{ osd_loop_size_gb }} GiB file"
-      when: osd_backend == 'loop'
+      when: osd_backend == 'loop' and not loop_img.stat.exists
 
     - name: Allocate backing file
       ansible.builtin.command: "fallocate -l {{ osd_loop_size_gb }}G {{ osd_loop_file }}"

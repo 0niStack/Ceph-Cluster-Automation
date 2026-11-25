@@ -20,6 +20,22 @@
       args:
         creates: /etc/ceph/ceph.conf
 
+    - name: ceph wrapper that runs the CLI inside the cluster's own container
+      ansible.builtin.copy:
+        dest: /usr/local/bin/ceph
+        mode: "0755"
+        content: |
+          #!/bin/sh
+          exec cephadm shell -- ceph "$@"
+
+    - name: rbd wrapper
+      ansible.builtin.copy:
+        dest: /usr/local/bin/rbd
+        mode: "0755"
+        content: |
+          #!/bin/sh
+          exec cephadm shell -- rbd "$@"
+
     - name: Wait for the cluster to answer
       ansible.builtin.command: ceph status
       register: st

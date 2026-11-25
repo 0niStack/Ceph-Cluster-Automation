@@ -25,3 +25,4 @@ osd_loop_file: /var/lib/ceph-osd.img
 osd_loop_size_gb: 15
 osd_vg: ceph-vg
 osd_lv: osd0
+

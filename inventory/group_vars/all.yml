@@ -22,7 +22,7 @@ skip_monitoring_stack: true
 #   loop = file on the OS disk (lab only)    disk = real extra disk at osd_device
 osd_backend: loop
 osd_loop_file: /var/lib/ceph-osd.img
-osd_loop_size_gb: 15
+osd_loop_size_gb: 4
 osd_vg: ceph-vg
 osd_lv: osd0
 

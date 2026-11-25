@@ -1,0 +1,60 @@
+---
+# Deploys one Ceph Object Gateway (S3 API), creates an S3 user, and writes ../.env for the app.
+- name: Deploy RGW and create an S3 user
+  hosts: bootstrap
+  become: true
+  vars:
+    rgw_service: s3
+    rgw_host: ceph2          # node that runs the gateway (needs ~300 MB RAM)
+    rgw_port: 8080
+    s3_user: app
+    s3_bucket: files
+  tasks:
+    - name: Deploy the gateway
+      ansible.builtin.command: >-
+        ceph orch apply rgw {{ rgw_service }} --placement="1 {{ rgw_host }}" --port={{ rgw_port }}
+      changed_when: false
+
+    - name: Wait until the S3 endpoint answers
+      ansible.builtin.uri:
+        url: "http://{{ hostvars[rgw_host].private_ip }}:{{ rgw_port }}"
+        status_code: [200, 403]
+      register: rgw_up
+      retries: 30
+      delay: 10
+      until: rgw_up.status is defined and rgw_up.status in [200, 403]
+
+    - name: Create the S3 user (skipped if it exists)
+      ansible.builtin.shell: >-
+        cephadm shell -- radosgw-admin user info --uid {{ s3_user }} >/dev/null 2>&1 ||
+        cephadm shell -- radosgw-admin user create --uid {{ s3_user }} --display-name "{{ s3_user }}"
+      changed_when: false
+
+    - name: Read the user's keys
+      ansible.builtin.command: cephadm shell -- radosgw-admin user info --uid {{ s3_user }}
+      register: user_info
+      changed_when: false
+      no_log: true
+
+    - name: Parse the user's keys
+      ansible.builtin.set_fact:
+        s3_key: "{{ (user_info.stdout | from_json)['keys'][0] }}"
+      no_log: true
+
+    - name: Write ../.env on the control machine
+      ansible.builtin.copy:
+        dest: "{{ playbook_dir }}/../.env"
+        mode: "0600"
+        content: |
+          S3_ENDPOINT=http://{{ hostvars[rgw_host].ansible_host }}:{{ rgw_port }}
+          S3_ACCESS_KEY={{ s3_key.access_key }}
+          S3_SECRET_KEY={{ s3_key.secret_key }}
+          S3_BUCKET={{ s3_bucket }}
+          MAX_UPLOAD_MB=100
+      delegate_to: localhost
+      become: false
+      no_log: true
+
+    - name: Done
+      ansible.builtin.debug:
+        msg: "S3 endpoint http://{{ hostvars[rgw_host].ansible_host }}:{{ rgw_port }}  (credentials saved in ../.env). Open port {{ rgw_port }} in the security group."

@@ -1,0 +1,42 @@
+---
+- name: Prepare all nodes
+  hosts: ceph
+  become: true
+  tasks:
+    - name: Set hostname (cephadm needs it to match the inventory name)
+      ansible.builtin.hostname:
+        name: "{{ inventory_hostname }}"
+
+    - name: Add all nodes to /etc/hosts
+      ansible.builtin.lineinfile:
+        path: /etc/hosts
+        regexp: '\s{{ item }}$'
+        line: "{{ hostvars[item].private_ip }} {{ item }}"
+      loop: "{{ groups['ceph'] }}"
+
+    - name: Install prerequisites
+      ansible.builtin.apt:
+        name: [docker.io, chrony, lvm2, python3, curl, cephadm]
+        update_cache: true
+        state: present
+
+    - name: Enable docker and chrony
+      ansible.builtin.systemd:
+        name: "{{ item }}"
+        enabled: true
+        state: started
+      loop: [docker, chrony]
+
+    - name: Check the OSD disk exists
+      ansible.builtin.stat:
+        path: "{{ osd_device }}"
+      register: osd_disk
+      when: osd_backend == 'disk'
+
+    - name: Fail if the extra disk is missing
+      ansible.builtin.assert:
+        that: osd_disk.stat.exists and osd_disk.stat.isblk
+        fail_msg: >-
+          {{ osd_device }} not found on {{ inventory_hostname }}.
+          Attach an extra EBS volume (e.g. 20 GiB) and check `lsblk`.
+      when: osd_backend == 'disk'

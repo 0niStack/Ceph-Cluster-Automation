@@ -1,0 +1,38 @@
+---
+- name: Bootstrap the Ceph cluster on the first node
+  hosts: bootstrap
+  become: true
+  tasks:
+    - name: Install ceph CLI
+      ansible.builtin.apt:
+        name: ceph-common
+        state: present
+
+    - name: cephadm bootstrap
+      ansible.builtin.command: >-
+        cephadm bootstrap
+        --mon-ip {{ private_ip }}
+        --ssh-user {{ ansible_user }}
+        --initial-dashboard-user {{ ceph_dashboard_user }}
+        --initial-dashboard-password '{{ ceph_dashboard_password }}'
+        --dashboard-password-noupdate
+        {{ '--skip-monitoring-stack' if skip_monitoring_stack else '' }}
+      args:
+        creates: /etc/ceph/ceph.conf
+
+    - name: Wait for the cluster to answer
+      ansible.builtin.command: ceph status
+      register: st
+      retries: 20
+      delay: 6
+      until: st.rc == 0
+      changed_when: false
+
+    - name: Small-cluster tuning
+      ansible.builtin.command: "ceph config set {{ item }}"
+      loop:
+        - "osd osd_memory_target {{ osd_memory_target }}"
+        - "global osd_pool_default_size {{ ceph_pool_size }}"
+        - "global osd_pool_default_min_size {{ ceph_pool_min_size }}"
+        - "mon auth_allow_insecure_global_id_reclaim false"
+      changed_when: false

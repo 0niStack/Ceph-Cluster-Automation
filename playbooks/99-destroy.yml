@@ -1,0 +1,22 @@
+---
+# DANGER: removes the cluster and WIPES the OSD disks
+- name: Destroy cluster
+  hosts: ceph
+  become: true
+  vars_prompt:
+    - name: confirm
+      prompt: "Type 'destroy' to wipe the Ceph cluster and OSD disks"
+      private: false
+  tasks:
+    - ansible.builtin.assert:
+        that: confirm == 'destroy'
+
+    - name: Get fsid
+      ansible.builtin.shell: grep -m1 fsid /etc/ceph/ceph.conf | awk '{print $3}'
+      register: fsid
+      changed_when: false
+      failed_when: false
+
+    - name: rm-cluster
+      ansible.builtin.command: "cephadm rm-cluster --force --zap-osds --fsid {{ fsid.stdout }}"
+      when: fsid.stdout | length > 0

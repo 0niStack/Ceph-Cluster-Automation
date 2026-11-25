@@ -1,0 +1,27 @@
+---
+# Change this (better: ansible-vault encrypt_string)
+ceph_dashboard_user: admin
+ceph_dashboard_password: "ChangeMe-Ceph123!"
+
+# Extra, EMPTY EBS volume attached to every VM (Nitro/t3 shows EBS as nvme1n1)
+osd_device: /dev/nvme1n1
+
+# Cluster sizing
+ceph_mon_count: 3
+ceph_mgr_count: 2
+ceph_pool_size: 3
+ceph_pool_min_size: 2
+
+# t3.medium has 4 GiB RAM -> keep each OSD small (1 GiB is the practical floor)
+osd_memory_target: 1073741824
+
+# Skip Prometheus/Grafana/Alertmanager containers to save RAM
+skip_monitoring_stack: true
+
+# OSD storage backend:
+#   loop = file on the OS disk (lab only)    disk = real extra disk at osd_device
+osd_backend: loop
+osd_loop_file: /var/lib/ceph-osd.img
+osd_loop_size_gb: 15
+osd_vg: ceph-vg
+osd_lv: osd0

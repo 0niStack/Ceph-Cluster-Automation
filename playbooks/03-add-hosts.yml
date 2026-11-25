@@ -1,0 +1,44 @@
+---
+- name: Read the cephadm public key
+  hosts: bootstrap
+  become: true
+  tasks:
+    - name: Slurp ceph.pub
+      ansible.builtin.slurp:
+        src: /etc/ceph/ceph.pub
+      register: ceph_pub
+
+- name: Distribute the key to every node
+  hosts: ceph
+  become: true
+  tasks:
+    - name: Authorize cephadm key for {{ ansible_user }}
+      ansible.builtin.authorized_key:
+        user: "{{ ansible_user }}"
+        key: "{{ hostvars[groups['bootstrap'][0]].ceph_pub.content | b64decode }}"
+
+- name: Add hosts to the orchestrator
+  hosts: bootstrap
+  become: true
+  tasks:
+    - name: ceph orch host add
+      ansible.builtin.command: "ceph orch host add {{ item }} {{ hostvars[item].private_ip }}"
+      loop: "{{ groups['ceph'] | difference(groups['bootstrap']) }}"
+      changed_when: false
+
+    - name: Place mons
+      ansible.builtin.command: >-
+        ceph orch apply mon --placement="{{ ceph_mon_count }} {{ groups['ceph'] | join(' ') }}"
+      changed_when: false
+
+    - name: Place mgrs
+      ansible.builtin.command: "ceph orch apply mgr --placement={{ ceph_mgr_count }}"
+      changed_when: false
+
+    - name: Wait until all hosts are listed
+      ansible.builtin.command: ceph orch host ls
+      register: hl
+      retries: 15
+      delay: 6
+      until: groups['ceph'] | select('in', hl.stdout) | list | length == groups['ceph'] | length
+      changed_when: false

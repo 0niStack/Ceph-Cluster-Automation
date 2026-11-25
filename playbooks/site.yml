@@ -1,0 +1,7 @@
+---
+- import_playbook: 01-prepare.yml
+- import_playbook: 02-bootstrap.yml
+- import_playbook: 03-add-hosts.yml
+- import_playbook: 03a-loop-osd.yml
+- import_playbook: 04-osds.yml
+- import_playbook: 05-verify.yml

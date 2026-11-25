@@ -1,0 +1,33 @@
+---
+- name: Create OSDs
+  hosts: bootstrap
+  become: true
+  tasks:
+    - name: OSD on the loop-backed LV (one per host)
+      ansible.builtin.command: "ceph orch daemon add osd {{ item }}:{{ osd_vg }}/{{ osd_lv }}"
+      loop: "{{ groups['ceph'] }}"
+      when: osd_backend == 'loop'
+      register: addosd
+      failed_when: addosd.rc != 0 and 'already' not in (addosd.stderr | lower)
+      changed_when: false
+
+    - name: OSD on every empty disk
+      ansible.builtin.command: ceph orch apply osd --all-available-devices
+      when: osd_backend == 'disk'
+      changed_when: false
+
+    - name: Wait for all OSDs to be up and in
+      ansible.builtin.command: ceph osd stat
+      register: osd
+      retries: 40
+      delay: 10
+      until: "osd.stdout is search((groups['ceph'] | length | string) ~ ' osds: ' ~ (groups['ceph'] | length | string) ~ ' up')"
+      changed_when: false
+
+    - name: Show OSD tree
+      ansible.builtin.command: ceph osd tree
+      register: tree
+      changed_when: false
+
+    - ansible.builtin.debug:
+        var: tree.stdout_lines

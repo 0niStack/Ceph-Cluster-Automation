@@ -1,0 +1,56 @@
+---
+# Only runs when osd_backend == loop
+- name: Create loopback-backed LVM volume for the OSD
+  hosts: ceph
+  become: true
+  tasks:
+    - name: Check free space on /
+      ansible.builtin.assert:
+        that: (ansible_facts.mounts | selectattr('mount','equalto','/') | first).size_available > (osd_loop_size_gb + 4) * 1024 * 1024 * 1024
+        fail_msg: "Not enough free space on / for a {{ osd_loop_size_gb }} GiB file"
+      when: osd_backend == 'loop'
+
+    - name: Allocate backing file
+      ansible.builtin.command: "fallocate -l {{ osd_loop_size_gb }}G {{ osd_loop_file }}"
+      args:
+        creates: "{{ osd_loop_file }}"
+      when: osd_backend == 'loop'
+
+    - name: Loop device service (survives reboot)
+      ansible.builtin.copy:
+        dest: /etc/systemd/system/ceph-loop.service
+        content: |
+          [Unit]
+          Description=Loop device for Ceph OSD
+          DefaultDependencies=no
+          After=local-fs.target
+          Before=docker.service
+
+          [Service]
+          Type=oneshot
+          RemainAfterExit=yes
+          ExecStart=/bin/sh -c 'losetup -j {{ osd_loop_file }} | grep -q . || losetup -f {{ osd_loop_file }}'
+          ExecStartPost=/bin/sh -c 'sleep 2; vgchange -ay {{ osd_vg }} || true'
+
+          [Install]
+          WantedBy=multi-user.target
+      when: osd_backend == 'loop'
+
+    - name: Enable and start it
+      ansible.builtin.systemd:
+        name: ceph-loop
+        enabled: true
+        daemon_reload: true
+        state: started
+      when: osd_backend == 'loop'
+
+    - name: Create PV / VG / LV
+      ansible.builtin.shell: |
+        set -e
+        DEV=$(losetup -j {{ osd_loop_file }} -n -O NAME | head -1)
+        pvcreate -y $DEV
+        vgcreate {{ osd_vg }} $DEV
+        lvcreate -y -l 100%FREE -n {{ osd_lv }} {{ osd_vg }}
+      args:
+        creates: "/dev/{{ osd_vg }}/{{ osd_lv }}"
+      when: osd_backend == 'loop'

@@ -1,0 +1,21 @@
+---
+- name: Verify cluster
+  hosts: bootstrap
+  become: true
+  tasks:
+    - name: Collect status
+      ansible.builtin.command: "{{ item }}"
+      loop: ["ceph -s", "ceph health detail", "ceph orch ps", "ceph df"]
+      register: out
+      changed_when: false
+
+    - name: Print
+      ansible.builtin.debug:
+        msg: "{{ item.stdout_lines }}"
+      loop: "{{ out.results }}"
+      loop_control:
+        label: "{{ item.item }}"
+
+    - name: Dashboard URL
+      ansible.builtin.debug:
+        msg: "https://{{ ansible_host }}:8443  user={{ ceph_dashboard_user }}"

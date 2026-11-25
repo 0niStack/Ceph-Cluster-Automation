@@ -1,0 +1,25 @@
+---
+# Optional: RBD pool + CephFS
+- name: Create pools / filesystem
+  hosts: bootstrap
+  become: true
+  tasks:
+    - name: RBD pool
+      ansible.builtin.shell: |
+        ceph osd pool create rbd
+        ceph osd pool application enable rbd rbd
+        rbd pool init rbd
+      changed_when: false
+
+    - name: CephFS volume (also deploys MDS)
+      ansible.builtin.command: ceph fs volume create cephfs
+      changed_when: false
+
+    - name: Test RBD image
+      ansible.builtin.shell: rbd create rbd/test --size 1G && rbd ls rbd
+      register: rbdtest
+      changed_when: false
+      failed_when: false
+
+    - ansible.builtin.debug:
+        var: rbdtest.stdout_lines
